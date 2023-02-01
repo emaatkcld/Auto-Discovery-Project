@@ -1,0 +1,35 @@
+---
+ - hosts: localhost
+   connection: local
+   gather_facts: yes
+
+   tasks:
+     - name: Get list of running EC2 instance IP
+       ec2_instance_info:
+         region: eu-west-2
+         filters:
+           "tag:Name": ["docker-asg", "Docker_Host"]
+       register: ec2_instance_info
+     - set_fact:
+         msg: "{{ ec2_instance_info | json_query('instances[*].private_ip_address') }}"
+     - debug:
+         var: msg
+       register: ec2_ip
+
+     - name: update inventory file
+       shell: |
+         echo "[webservers]" > /etc/ansible/hosts;
+         {% for ip in range(ec2_ip['msg']|length)%}
+         ssh-keyscan -H {{ec2_ip['msg'][ip]}} >> ~/.ssh/known_hosts
+         echo -e "{{ec2_ip['msg'][ip]}} ansible_user=ec2-user  ansible_ssh_private_key_file=/home/ec2-user/padeu2-kp\n" >> /etc/ansible/hosts
+         {%endfor%}
+
+     - pause: seconds=20
+
+ - import_playbook: docker-container.yml
+   ignore_errors: yes
+
+
+    #  environment:
+    #   AWS_ACCESS_KEY_ID: "{{AWS_ACCESS_KEY_ID}}"
+    #   AWS_SECRET_ACCESS_KEY: "{{AWS_SECRET_ACCESS_KEY}}"
